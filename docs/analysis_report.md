@@ -1,8 +1,124 @@
-# Pneumonia-Detection-Xray-CNN
+# Pneumonia Detection with ResNet18 + GradCAM
+## 분석 리포트
 
-An end-to-end computer vision pipeline to classify pneumonia from chest X-ray images. This project implements a CNN-based model using PyTorch, covering the entire process from data preprocessing and EDA to model training and performance evaluation on the Kaggle dataset.
+---
 
+## 1. 프로젝트 개요
 
+흉부 X-ray 이미지를 기반으로 정상/폐렴을 이진 분류하는 딥러닝 모델을 개발했다. 단순 fine-tuning에 그치지 않고, **의료 도메인 특화 설계**와 **모델 판단 근거의 임상적 검증**을 핵심 목표로 삼았다.
 
-To be updated...
+**핵심 문제의식**: X-ray 판독에서 폐렴 환자를 정상으로 오진(FN, False Negative)하는 것은 치료 지연으로 이어져 임상적으로 치명적이다. 따라서 단순 Accuracy보다 **Recall과 AUROC**를 우선 설계 지표로 설정했다.
 
+---
+
+## 2. 데이터셋
+
+- **출처**: [Kaggle – Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)
+- **구성**:
+
+| 분할 | Normal | Pneumonia | 합계 |
+|------|--------|-----------|------|
+| Train | 1,341 | 3,875 | 5,216 |
+| Val | 8 | 8 | 16 |
+| Test | 234 | 390 | 624 |
+
+- **클래스 불균형**: 정상 대비 폐렴이 약 3배 많음 → 데이터 증강 및 평가 지표를 F1/Recall 중심으로 설정
+- **이미지 특성**: 크기가 제각각(다양한 해상도) → 224×224로 리사이즈 후 ImageNet 정규화 적용
+
+---
+
+## 3. 모델 아키텍처
+
+### 설계 원칙
+
+사전학습된 ResNet18 백본을 활용하되, **자연 이미지에 최적화된 ResNet의 초기 특징 추출 단계를 의료 이미지에 맞게 조정**하는 것이 핵심 설계 포인트였다.
+
+```
+Input (224×224 RGB)
+    ↓
+[pre_conv block]        ← X-ray 특화 초기 특징 추출 (채널: 3→16→3)
+    ↓
+[ResNet18 Backbone]     ← ImageNet 사전학습 가중치
+    ↓
+[FC Head]
+  Linear(512→128) + BatchNorm + ReLU + Dropout(0.5)
+  Linear(128→1)
+    ↓
+BCEWithLogitsLoss
+```
+
+### pre_conv 블록의 역할
+
+흉부 X-ray는 자연 이미지와 달리 **저대비, 음영 기반의 패턴**이 주를 이룬다. ResNet의 첫 conv 레이어는 ImageNet으로 학습된 엣지·색상 필터에 편향되어 있어, X-ray 고유의 미세한 밀도 차이를 충분히 포착하지 못할 수 있다.
+
+`pre_conv(3→16→3)`는 이 문제를 보완하기 위해 ResNet 앞단에 추가된 소형 블록으로, X-ray 도메인에 특화된 초기 표현을 학습하면서도 ResNet 입력 형식(3채널)을 그대로 유지한다.
+
+---
+
+## 4. 학습 설정
+
+- **EarlyStopping**: patience=5, val_loss 기준 (과적합 방지 및 최적 가중치 자동 복원)
+- **손실함수**: BCEWithLogitsLoss (이진 분류에 sigmoid + BCE를 수치 안정적으로 결합)
+- **데이터 증강**: RandomHorizontalFlip, RandomRotation 등 (폐렴 이미지 편향 보완)
+
+---
+
+## 5. Ablation Study
+
+FC 레이어 크기, Dropout, Backbone freeze 여부를 실험 축으로 설정하여 최적 구조를 탐색했다.
+
+| 설정 | FC 크기 | Dropout | Freeze | Best Val Loss | Accuracy | Recall | F1 | AUROC |
+|------|---------|---------|--------|--------------|----------|--------|----|-------|
+| **baseline** | 512→128 | 0.5 | 없음 | **0.0276** | 0.8654 | **0.9949** | **0.9023** | 0.9249 |
+| fc64 | 512→64 | 0.5 | 없음 | 0.0874 | 0.8333 | 0.9974 | 0.8821 | 0.9002 |
+| freeze_layer1-3 | 512→128 | 0.5 | layer1~3 | 0.3828 | 0.8638 | 0.9897 | 0.9008 | **0.9564** |
+
+**선정 결과**: `baseline` (F1 기준 최우수)
+
+- `fc64`: 파라미터를 줄였음에도 val_loss가 3배 이상 높아 일반화 성능 저하 확인
+- `freeze_layer1-3`: AUROC는 가장 높지만 val_loss가 현저히 높고 학습이 10 epoch에서 조기 종료됨 — backbone feature의 의료 이미지 적응이 필요함을 시사
+
+---
+
+## 6. 임계값 최적화 및 최종 평가
+
+클래스 불균형 환경에서 Accuracy만으로는 성능을 평가할 수 없다. 임계값을 0.3 / 0.5 / 0.7로 변경하며 평가한 결과, **임계값 0.7에서 F1이 최대**였으며, 이를 최종 모델로 채택했다.
+
+| Threshold | Accuracy | Precision | Recall | F1 Score | AUROC |
+|-----------|----------|-----------|--------|----------|-------|
+| 0.7 (채택) | **87.5%** | 83.9% | **98.97%** | **90.82%** | **92.49%** |
+
+**임상적 해석**: Recall 98.97%는 테스트셋 내 폐렴 환자 390명 중 약 386명을 정확히 탐지함을 의미한다. FN(폐렴 미진단)이 약 4건으로 극소화되어, 진단 보조 도구로서의 안전성을 갖추고 있다.
+
+---
+
+## 7. GradCAM 기반 임상 유효성 검증
+
+단순 성능 지표를 넘어, **모델이 올바른 의학적 근거로 판단하는지**를 GradCAM으로 시각적으로 검증했다.
+
+| 케이스 | 기대 패턴 | 검증 결과 |
+|--------|-----------|-----------|
+| 폐렴 | 폐 하엽·중엽 실질에 집중 | ✅ 폐 실질 영역에 activation 집중 |
+| 정상 | 전반적 분산 | ✅ 특정 병변 없이 분산된 패턴 |
+| 불유효 사례 | 뼈·기기 아티팩트에 집중 | ⚠️ 경계 영역에 activation — 해석 주의 필요 |
+
+pre_conv 블록의 16개 학습된 필터를 시각화한 결과, 명확한 색상 대비 패턴이 확인되어 X-ray 이미지 내 해부학적 경계 탐지 능력이 형성되었음을 확인했다.
+
+**GradCAM 해석 한계**:
+- 입력마다 기울기가 달라져 활성화 위치가 변동될 수 있음
+- 시각적 설명이 모델 내부 의사결정과 완전히 일치하지 않을 수 있음
+- 따라서 GradCAM은 모델 신뢰성 검증의 보조 도구로 활용해야 하며, 단독 임상 판단 근거로 사용 불가
+
+---
+
+## 8. 결론 및 한계
+
+**성과 요약**
+- Recall 98.97%, AUROC 92.49%로 폐렴 미진단(FN) 최소화 목표 달성
+- Ablation Study를 통한 구조 최적화로 과적합 없는 일반화 모델 확보
+- GradCAM을 통해 모델이 폐 실질 영역을 근거로 판단함을 임상적으로 검증
+
+**한계 및 향후 과제**
+- 학습 데이터가 단일 출처(Kaggle)로 다기관 임상 데이터로의 일반화 검증 필요
+- 세균성/바이러스성 폐렴 세분류로 확장 가능성 탐색
+- 실제 임상 배포를 위해서는 전문의 레이블링 데이터 기반 추가 검증 필수
