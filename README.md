@@ -1,28 +1,33 @@
-# Pneumonia Detection with ResNet18 + GradCAM
-**흉부 X-ray 이미지 기반 폐렴 이진 분류 — 의료 AI 설계 관점의 딥러닝 프로젝트**
+# Pneumonia Detection — ResNet18 + GradCAM
+흉부 X-ray 기반 폐렴 이진 분류 | 의료 AI 설계 관점의 딥러닝 프로젝트
 
 ---
 
-## 핵심 문제의식
+## 이 프로젝트가 특별한 이유
 
-X-ray 판독에서 **폐렴 환자를 정상으로 오진(FN)**하는 것은 치료 지연으로 이어지는 임상적으로 치명적인 오류다.  
-따라서 이 프로젝트는 단순 Accuracy 최적화가 아닌, **FN 최소화(Recall 최대화)** 를 설계 철학의 출발점으로 삼았다.
+단순한 ResNet fine-tuning이 아닌, **의료 도메인 문제를 설계 단계부터 반영**한 세 가지 포인트.
 
-> **모델 선택 기준 → F1** (Ablation Study 단계: 편향 없는 전반 성능 비교)  
-> **임계값 선택 기준 → Recall** (평가 단계: 폐렴 미검출 최소화가 임상적 우선순위)
+**1. pre_conv block — X-ray 특화 전처리 레이어 직접 설계**  
+ResNet18 앞단에 `Conv2d(3→16→3)` 블록 추가. 자연 이미지 필터에 편향된 ResNet이 흉부 X-ray의 저대비·음영 패턴을 포착하도록 도메인 적응 레이어를 수동 설계. ResNet 입력 형식(3채널) 유지로 사전학습 가중치와 완전 호환.
+
+**2. Ablation Study — 구조 선택의 근거를 실험으로 증명**  
+FC 크기 / Backbone freeze 전략을 동일 조건에서 실험 비교. "왜 이 구조를 선택했는가"에 대한 답을 수치로 제시.
+
+**3. F1 → Recall 2단계 지표 전략 — 임상 논리를 평가 설계에 반영**  
+모델 선택은 F1 기준(편향 없는 전반 성능), 임계값 선택은 Recall 기준(FN 최소화 우선). 미검출(FN)이 과검출(FP)보다 치명적인 의료 특성을 평가 로직에 직접 적용.
 
 ---
 
 ## 최종 성능
 
-| Threshold | Accuracy | Precision | Recall | F1 Score | AUROC |
-|-----------|----------|-----------|--------|----------|-------|
-| 0.3 | 87.5% | 83.9% | **98.97%** | 90.82% | 92.49% |
-| 0.5 | 89.74% | 89.25% | 96.41% | 92.70% | 92.49% |
-| 0.7 | 90.22% | 93.03% | 92.56% | 92.80% | 92.49% |
+| Threshold | Accuracy | Precision | Recall | F1 | AUROC |
+|-----------|----------|-----------|--------|----|-------|
+| **0.3** ← 채택 | 85.58% | 81.78% | **98.97%** | 89.56% | **95.36%** |
+| 0.5 | 87.50% | 84.36% | 98.21% | 90.76% | 95.36% |
+| 0.7 | 88.62% | 85.84% | 97.95% | 91.47% | 95.36% |
 
-**채택 임계값: 0.3** — Recall 기준 최적 (FN 최소화 우선)  
-AUROC 0.9249 — 임계값 무관하게 모델 자체의 판별력이 임상적으로 유의미한 수준(≥0.90)
+Recall 기준 최적 임계값 0.3 채택 — 폐렴 390명 중 **387명 탐지, FN 3건**  
+AUROC 95.36% — 임계값 무관한 모델 판별력, 임상적으로 유의미한 수준(≥0.90)
 
 ---
 
@@ -31,140 +36,58 @@ AUROC 0.9249 — 임계값 무관하게 모델 자체의 판별력이 임상적�
 ```
 Input (224×224 RGB)
     ↓
-[pre_conv block]       ← X-ray 특화 초기 특징 추출 (채널: 3 → 16 → 3)
-    ↓                     자연 이미지에 최적화된 ResNet 앞단에 의료 도메인 적응 레이어 추가
-[ResNet18 Backbone]    ← ImageNet 사전학습 가중치 (전이학습)
+[pre_conv]    Conv2d(3→16→3) + BN + ReLU × 2   ← X-ray 특화 도메인 적응
     ↓
-[FC Head]
-  Linear(512→128) + BatchNorm1d + ReLU + Dropout(0.5)
-  Linear(128→1)
+[ResNet18]    ImageNet 사전학습 backbone
     ↓
-BCEWithLogitsLoss      ← sigmoid + BCE를 수치 안정적으로 결합
+[FC Head]     Linear(512→128) + BN + ReLU + Dropout(0.5) + Linear(128→1)
+    ↓
+BCEWithLogitsLoss
 ```
 
-### pre_conv 블록을 설계한 이유
+---
 
-흉부 X-ray는 자연 이미지와 달리 **저대비·음영 기반 패턴**이 핵심 정보다. ResNet의 초기 레이어는 ImageNet 기반 엣지·색상 필터에 편향되어 있어, X-ray 고유의 밀도 차이를 충분히 포착하지 못할 수 있다. `pre_conv(3→16→3)` 블록은 이를 보완하기 위해 ResNet 입력 형식(3채널)을 유지하면서 X-ray 특화 표현을 선학습하는 구조다.
+## Ablation Study 결과
+
+| 설정 | Val Loss | F1 | Recall | AUROC | 비고 |
+|------|----------|----|--------|-------|------|
+| **baseline** | **0.0315** | **0.9076** | 0.9821 | **0.9536** | 선정 |
+| fc64 | 0.1041 | 0.8940 | 0.9949 | 0.9283 | val_loss 3배↑ |
+| freeze_layer1-3 | 0.2824 | 0.8706 | 0.9923 | 0.9451 | ep8 조기종료 |
+
+<img src="outputs/figures/ablation_metrics_valloss.png" width="750"/>
+
+baseline 선정: F1 최고 + val_loss 최저 → 일반화 신뢰도 가장 높음  
+freeze_layer1-3: AUROC는 높지만 val_loss 0.28로 불안정 — backbone 학습 없이는 X-ray 도메인 적응에 한계
 
 ---
 
-## Ablation Study — 파라미터 축소 실험
+## GradCAM — 모델이 올바른 근거로 판단하는지 검증
 
-FC Head 크기 / Dropout / Backbone freeze 여부를 실험 축으로 설정, 최적 구조를 탐색했다.
+성능 수치만으로는 "왜 맞혔는지" 알 수 없음. GradCAM으로 모델 attention이 **폐 실질(lung parenchyma)** 에 집중하는지 임상 기준으로 자동 판정.
 
-| 설정 | FC 크기 | Dropout | Freeze | Val Loss | Recall | F1 | AUROC |
-|------|---------|---------|--------|----------|--------|-----|-------|
-| **baseline** | 512→128 | 0.5 | 없음 | **0.0276** | **99.49%** | **90.23%** | 92.49% |
-| fc64 | 512→64 | 0.5 | 없음 | 0.0874 | 99.74% | 88.21% | 90.02% |
-| freeze_layer1-3 | 512→128 | 0.5 | layer1~3 | 0.3828 | 98.97% | 90.08% | **95.64%** |
+<img src="outputs/figures/GradCAM_Model_Decision_Basis_Verification.png" width="780"/>
 
-→ **baseline** 선정 (F1 기준 최우수 + val_loss 최저로 일반화 신뢰도 가장 높음)
-
-- `fc64`: 파라미터를 줄였으나 val_loss 3배 이상 — 과적합 억제보다 표현력 손실이 더 컸음
-- `freeze_layer1-3`: AUROC는 최고지만 val_loss 0.38로 학습이 불안정 — backbone의 의료 도메인 적응이 필요함을 시사
-
-<img src="outputs/figures/ablation_metrics_valloss.png" width="800"/>
-<img src="outputs/figures/ablation_learning_convergence.png" width="600"/>
-
----
-
-## 평가 — 임계값별 지표 비교
-
-임계값을 0.3 / 0.5 / 0.7로 변경하며 Precision-Recall 트레이드오프를 직접 확인했다.
-
-<img src="outputs/figures/Evaluation_Metrics_Summary_by_Threshold.png" width="700"/>
-
-**혼동행렬** (채택 임계값 0.3 기준)
-
-<img src="outputs/figures/Confusion_Matrix.png" width="350"/>
-
-FN(폐렴 미진단): 약 4건 / FP(과진단): 73건  
-→ 과진단은 추가 검사로 대응 가능하지만, 미진단은 치료 기회 자체를 놓치는 오류
-
----
-
-## GradCAM — 모델 판단 근거의 임상적 검증
-
-성능 수치만으로는 "모델이 올바른 이유로 맞혔는지" 알 수 없다.  
-GradCAM으로 모델의 attention이 실제로 **폐 실질(lung parenchyma) 영역**에 집중하는지 검증했다.
-
-<img src="outputs/figures/GradCAM_Model_Decision_Basis_Verification.png" width="800"/>
-
-| 케이스 | 기대 패턴 | 판정 기준 |
-|--------|-----------|-----------|
-| 폐렴 | 폐 하엽·중엽 실질에 집중 | Focused on Lung Parenchyma (Valid) |
-| 정상 | 전반적 분산 | Diffused Activation |
-| 주의 | 뼈·기기 아티팩트에 집중 | Focused on Border Area (Check Required) |
-
-**pre_conv 필터 시각화** — 학습된 16개 필터가 명확한 색상 대비와 방향성 패턴을 가지고 있어, X-ray 내 해부학적 경계 탐지 능력이 형성됐음을 확인
-
-<img src="outputs/figures/Pre_trained_Filters.png" width="700"/>
-
----
-
-## 데이터 전처리 — 증강 전후 비교
-
-<img src="outputs/figures/Original_Image.png" width="500"/>
-<img src="outputs/figures/Augmented_Image.png" width="500"/>
-
-RandomHorizontalFlip + RandomRotation 적용. 수평 반전은 좌우폐 대칭성이 있는 흉부 X-ray에서 유효한 증강이며, 과도한 회전은 의학적 구도를 왜곡할 수 있어 10도로 제한했다.
-
----
-
-## 추론 샘플 시각화
-
-<img src="outputs/figures/inference_prediction_results.png" width="800"/>
+폐 영역 vs 경계 영역의 activation 비율을 정량 계산해 `Focused on Lung Parenchyma / Diffused / Border` 3단계로 자동 분류. 단순 시각화가 아닌 **정량적 유효성 검증**까지 구현.
 
 ---
 
 ## 프로젝트 구조
 
 ```
-Pneumonia-Detection-Xray-CNN/
-├── notebooks/
-│   └── project_pneumonia_diagnosis_final.ipynb   # 전체 실험 노트북 (EDA → 학습 → 평가 → GradCAM)
+├── notebooks/project_pneumonia_diagnosis_final.ipynb
 ├── src/
-│   ├── dataset.py      # ChestXRayDataset + DataLoader 팩토리
-│   ├── model.py        # PneumoniaResNet (pre_conv + ResNet18 + FC Head)
-│   ├── train.py        # EarlyStopping + ReduceLROnPlateau 학습 루프
-│   ├── experiment.py   # Ablation Study 실험 실행
-│   ├── evaluate.py     # 임계값별 메트릭 + 혼동행렬 + ROC
-│   └── gradcam.py      # GradCAM + 임상 유효성 검증 시각화
-├── outputs/
-│   ├── figures/        # 모든 시각화 결과물
-│   └── models/         # 저장된 모델 가중치
-├── docs/
-│   └── analysis_report.md   # 상세 분석 보고서
-├── data/
-│   └── README.md       # 데이터 출처 및 구조 안내
-├── requirements.txt
-└── .gitignore
+│   ├── model.py        # PneumoniaResNet (pre_conv + ResNet18)
+│   ├── train.py        # EarlyStopping + ReduceLROnPlateau
+│   ├── experiment.py   # Ablation Study
+│   ├── evaluate.py     # 임계값별 메트릭 + 혼동행렬
+│   ├── gradcam.py      # GradCAM + 임상 유효성 자동 판정
+│   └── dataset.py      # ChestXRayDataset + transforms
+├── outputs/figures/    # 모든 시각화 결과
+├── docs/analysis_report.md
+└── data/README.md
 ```
 
----
+**Tech Stack** `Python` `PyTorch` `ResNet18` `GradCAM` `scikit-learn` `matplotlib` `pandas`
 
-## 실행 방법
-
-```bash
-pip install -r requirements.txt
-
-# Kaggle 데이터 다운로드
-kaggle datasets download paultimothymooney/chest-xray-pneumonia
-unzip chest-xray-pneumonia.zip -d data/
-
-# notebooks/ 의 ipynb를 순서대로 실행하거나,
-# src/ 모듈을 직접 import하여 사용
-```
-
----
-
-## 기술 스택
-
-`Python` `PyTorch` `torchvision` `ResNet18` `GradCAM` `scikit-learn` `matplotlib` `seaborn` `pandas`
-
----
-
-## 데이터 출처
-
-[Kaggle: Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)  
-Train 5,216장 / Val 16장 / Test 624장 | NORMAL : PNEUMONIA ≈ 1 : 3
+**Data** [Kaggle Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia) — Train 5,216 / Val 16 / Test 624
