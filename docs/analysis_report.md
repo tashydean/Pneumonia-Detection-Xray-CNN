@@ -5,8 +5,9 @@
 
 ## 1. 배경 — 왜 Accuracy가 아닌 Recall인가
 
-흉부 X-ray 판독에서 폐렴을 정상으로 오진(FN)하는 것은 치료 기회 자체를 박탈하는 치명적 오류다. 
-반면 과검출(FP)은 추가 검사로 대응 가능하다. 이 비대칭성이 이 프로젝트의 모든 설계 결정의 출발점이다.
+흉부 X-ray 판독에서 폐렴을 정상으로 오진(FN)하는 것은 치료 기회 자체를 박탈하는 치명적 오류다. <br>
+반면 과검출(FP)은 추가 검사로 대응 가능하다. <br>
+이 비대칭성이 이 프로젝트의 모든 설계 결정의 출발점이다.
 
 | 평가 단계 | 기준 지표 | 이유 |
 |-----------|-----------|------|
@@ -36,7 +37,7 @@ Val set이 16장(8+8)으로 극히 작은 것은 EarlyStopping 신뢰도의 한�
 
 ### 왜 추가했는가
 
-ResNet18의 초기 conv 레이어는 ImageNet(자연 이미지) 기반 엣지·색상 필터에 편향되어 있다. 
+ResNet18의 초기 conv 레이어는 ImageNet(자연 이미지) 기반 엣지·색상 필터에 편향되어 있다. <br>
 흉부 X-ray는 저대비·음영 중심의 패턴으로 구성되어, 이 간극을 좁히는 도메인 적응 레이어가 필요했다.
 
 ### 구조
@@ -86,9 +87,9 @@ FC 크기 / Backbone freeze 전략을 동일 조건에서 비교해 최적 구�
 
 **baseline 선정 (F1 기준)**
 
-- **fc64**: Recall은 높지만 val_loss 0.10으로 3배 이상 높음. 
+- **fc64**: Recall은 높지만 val_loss 0.10으로 3배 이상 높음. <br>
             파라미터 절감이 일반화 개선이 아닌 표현력 손실로 이어진 케이스.
-- **freeze_layer1-3**: AUROC는 준수하지만 ep8에서 조기종료, val_loss 0.28로 학습 불안정. 
+- **freeze_layer1-3**: AUROC는 준수하지만 ep8에서 조기종료, val_loss 0.28로 학습 불안정. <br>
                       backbone 초기 레이어를 고정하면 X-ray 도메인 특화 표현 학습에 제약이 생김을 시사.
 
 ---
@@ -129,19 +130,19 @@ FN이 치료 기회 자체를 박탈한다면, FP는 추가 검사 비용 증가
 
 <img src="../outputs/figures/GradCAM_Model_Decision_Basis_Verification.png" width="800"/>
 
-각 케이스에서 Original X-ray / GradCAM Heatmap / Overlay / Confidence 4컬럼으로 시각화.
+각 케이스에서 Original X-ray / GradCAM Heatmap / Overlay / Confidence 4컬럼으로 시각화.<br>
 폐렴 케이스에서 heatmap이 폐 실질 영역에 집중하는지, 정상 케이스에서 분산되는지를 육안으로 확인 가능.
 
-코드 내부에는 폐 중앙 영역 vs 경계 영역의 activation 비율을 정량 계산해
-`Focused on Lung Parenchyma / Diffused / Border` 3단계로 자동 판정하는 로직을 구현했으나,
+코드 내부에는 폐 중앙 영역 vs 경계 영역의 activation 비율을 정량 계산해<br>
+`Focused on Lung Parenchyma / Diffused / Border` 3단계로 자동 판정하는 로직을 구현했으나,<br>
 현재 시각화 출력에는 미반영 상태 — 향후 개선 과제로 남김.
 
-오분류(MISS) 케이스에서도 heatmap이 폐 영역을 보고 있다면,
-시각적으로 구분이 어려운 경계 케이스(borderline case)로 해석.
+오분류(MISS) 케이스에서도 heatmap이 폐 영역을 보고 있다면,<br>
+시각적으로 구분이 어려운 경계 케이스(borderline case)로 해석.<br>
 오분류 자체보다 **attention의 위치**가 임상적 신뢰성 판단의 기준.
 
-**GradCAM의 한계**: 입력마다 기울기가 달라 활성화 위치가 가변적.
-시각적 설명과 모델 내부 의사결정이 완전히 일치하지 않을 수 있음.
+**GradCAM의 한계**: 입력마다 기울기가 달라 활성화 위치가 가변적.<br>
+시각적 설명과 모델 내부 의사결정이 완전히 일치하지 않을 수 있음.<br>
 신뢰성 검증의 보조 도구로 활용.
 
 ---
