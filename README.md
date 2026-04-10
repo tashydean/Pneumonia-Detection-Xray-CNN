@@ -77,13 +77,16 @@ freeze_layer1-3: AUROC는 높지만 val_loss 0.28로 불안정 — backbone 학�
 ```
 ├── notebooks/project_pneumonia_diagnosis_final.ipynb
 ├── src/
+│   ├── README.md
 │   ├── model.py        # PneumoniaResNet (pre_conv + ResNet18)
 │   ├── train.py        # EarlyStopping + ReduceLROnPlateau
 │   ├── experiment.py   # Ablation Study
 │   ├── evaluate.py     # 임계값별 메트릭 + 혼동행렬
 │   ├── gradcam.py      # GradCAM + 임상 유효성 자동 판정
 │   └── dataset.py      # ChestXRayDataset + transforms
-├── outputs/figures/    # 모든 시각화 결과
+├── outputs/
+│   ├── figures/        # 모든 시각화 결과
+│   ├── models/         # 베스트 모델
 ├── docs/analysis_report.md
 └── data/README.md
 ```
