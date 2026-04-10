@@ -74,11 +74,11 @@ def _get_validity_note(heatmap):
     border_mean = border_region.mean() if len(border_region) > 0 else 0
 
     if lung_mean > 0.45 and lung_mean > border_mean * 1.5:
-        return "✅ 폐 실질 영역 집중 (유효)"
+        return "Focused on Lung Parenchyma (Valid)"
     elif border_mean > lung_mean * 1.3:
-        return "⚠️  경계 영역 집중 (재확인 필요)"
+        return "Focused on Border Area (Check Required)"
     else:
-        return "ℹ️  분산된 activation"
+        return "Diffused Activation"
 
 
 def visualize_gradcam_panel(model, loader, device, num_normal=4, num_pneumonia=4, threshold=0.5):
@@ -98,7 +98,7 @@ def visualize_gradcam_panel(model, loader, device, num_normal=4, num_pneumonia=4
     cases = [("NORMAL", s, 0) for s in normal_samples] + \
             [("PNEUMONIA", s, 1) for s in pneumonia_samples]
 
-    colormap = cm.get_cmap("jet")
+    colormap = plt.colormaps["jet"]
     fig, axes = plt.subplots(len(cases), 4, figsize=(16, 4 * len(cases)))
     fig.suptitle("GradCAM — Model Decision Basis Verification\n"
                  "[Original] [Heatmap] [Overlay] [Confidence]",
@@ -115,7 +115,7 @@ def visualize_gradcam_panel(model, loader, device, num_normal=4, num_pneumonia=4
 
         prob     = torch.sigmoid(model(img_tensor.unsqueeze(0).to(device))).item()
         pred_cls = "PNEUMONIA" if prob >= threshold else "NORMAL"
-        correct  = "✅" if (prob >= threshold) == bool(true_lbl) else "❌"
+        correct  = "[OK]" if (prob >= threshold) == bool(true_lbl) else "[MISS]"
         orig_img = denormalize(img_tensor)
         overlay  = orig_img * 0.55 + colormap(heatmap)[..., :3] * 0.45
 
@@ -138,7 +138,7 @@ def visualize_gradcam_panel(model, loader, device, num_normal=4, num_pneumonia=4
                               label=f"threshold={threshold}")
         axes[row, 3].set_title(f"Pred: {pred_cls} {correct}\n(p={prob:.3f})",
                                 fontsize=9,
-                                color="darkgreen" if correct == "✅" else "crimson")
+                                color="darkgreen" if correct == "[OK]" else "crimson")
         for bar, val in zip(bars, [1 - prob, prob]):
             axes[row, 3].text(min(val + 0.02, 0.93),
                               bar.get_y() + bar.get_height() / 2,

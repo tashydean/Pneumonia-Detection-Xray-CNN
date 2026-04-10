@@ -43,10 +43,11 @@ def evaluate_thresholds(all_labels, all_probs, thresholds=[0.3, 0.5, 0.7]):
             'AUROC':     round(auroc, 4),
         })
     df = pd.DataFrame(records).set_index('Threshold')
-    print("\n📊 Threshold Evaluation:")
+    print("\n[Threshold Evaluation]")
     print(df.to_string())
-    best = df['F1 Score'].idxmax()
-    print(f"\n✅ Best threshold (F1 기준): {best}")
+    # 모델 선택(ablation)은 F1 기준; 임계값 선택은 Recall 기준 (FN 최소화)
+    best = df['Recall'].idxmax()
+    print(f"\n[Best Threshold] Recall 기준(FN 최소화): {best}")
     return df
 
 

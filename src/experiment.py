@@ -136,7 +136,7 @@ def run_ablation(train_loader, val_loader, test_loader, device):
     best_model = next(r['model'] for r in ablation_results if r['name'] == best_name)
     best_model.eval()
 
-    print(f"\n🏆 Best 설정 (F1 기준): {best_name}")
+    print(f"\n[Best Model] F1 기준: {best_name}")
     print(df_ablation.loc[best_name])
 
     # 시각화

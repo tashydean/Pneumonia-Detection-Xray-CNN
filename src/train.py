@@ -39,7 +39,7 @@ class EarlyStopping:
     def restore_best(self, model):
         if self.best_state:
             model.load_state_dict(self.best_state)
-            print(f"✅ Best model 복원 (val_loss={self.best_loss:.4f})")
+            print(f"[Restored] Best model (val_loss={self.best_loss:.4f})")
         return model
 
 
@@ -105,7 +105,7 @@ def train(model, train_loader, val_loader, device,
               f"Val {val_epoch_loss:.4f}/{val_epoch_acc:.4f} | LR {current_lr:.2e}")
 
         if early_stop.step(val_epoch_loss, model):
-            print(f"\n🛑 EarlyStopping at epoch {epoch+1}")
+            print(f"\n[EarlyStopping] Stopped at epoch {epoch+1}")
             break
 
     model = early_stop.restore_best(model)
