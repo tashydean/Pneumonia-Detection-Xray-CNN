@@ -2,12 +2,9 @@
 data/chest_xray/
 *.jpg
 *.jpeg
-*.png
 *.dcm
 
-# 모델 가중치
-outputs/models/*.pth
-outputs/models/*.pt
+
 
 # Python
 __pycache__/
